@@ -1,0 +1,928 @@
+---
+title: "Moderated mediation for ELS pipline"
+output: html_document
+---
+### basic setup
+
+```{r}
+library(dplyr)
+library(rosetta)
+library(ggplot2)
+library(lavaan)
+library(semTools)
+library(fastDummies)
+setwd('~/Desktop/COGGPS_PAPER/final_ver')
+```
+
+### extracting morphology brain features 
+
+```{r}
+
+###data prep
+mor<-read.csv(file ='mor_final.csv')
+pheno<-read.csv(file='final_phenotype_for_MM_european.csv')
+#pheno<-pheno[pheno$sex==1,]
+#pheno<-pheno[pheno$sex==1,]
+#mor$subjectkey<-gsub("_","",mor$subjectkey)
+MERGED<-merge(pheno,mor,by='subjectkey')
+#MERGED<-na.omit(MERGED)
+
+COV_LIST <- c('age', 'sex','high.educ', 'income', 'married',,'abcd_site', 'BMI') # should be checked
+fact_COV_LIST <- c('age','sex' ,'high.educ', 'income' ,'factor(married)','factor(abcd_site)', 'BMI') # should be checked
+
+print(fact_COV_LIST)
+COVARS <- paste(fact_COV_LIST, collapse=" + ")
+GPS_LIST<-c('CP','EA')
+
+
+names(MERGED)[43]
+BRAIN_START = 43
+BRAIN_END <- length(MERGED)
+NUM_GPS <- length(GPS_LIST)
+
+BETA_LIST <- c( 'beta_brain')
+P_LIST <- c( 'p_brain')
+
+###calculating
+for (j in 1:2){
+  for (gps in GPS_LIST[[j]]){
+    print(paste('--------------',gps,'--------------'))
+    # initialize all vector
+    brain <- vector()
+    
+    glm.se <- vector()
+    glm.beta <- data.frame()
+    glm.p <- data.frame()
+    
+    # DO GLM
+    for (i in BRAIN_START:BRAIN_END){
+      print(i)
+      brain <- c(brain, names(MERGED)[i])
+      
+      form <- paste(names(MERGED)[i], '~',gps,'+' ,COVARS)
+      
+      glm.re <- glm(as.formula(form), data=MERGED, family=gaussian())
+      cff <- coef(summary(glm.re))
+      glm.se <- c(glm.se, round(cff[2, 2], 5))
+      glm.beta <- rbind.data.frame(glm.beta, cff[2,1])
+      glm.p <- rbind.data.frame(glm.p, cff[2,4])
+      
+      
+    }
+    colnames(glm.beta) <- BETA_LIST
+    colnames(glm.p) <- P_LIST
+    result <- data.frame(brain, glm.beta, glm.p)
+    result <- result[-which(duplicated(result$p_brain)),]
+    BONF<-p.adjust(result$p_brain,method='bonferroni')
+    result<-cbind(result,BONF)
+    FILE_NAME <- paste0('~/Desktop/GLM_mor_cov_', gps, '_prsice2_corrected.csv')
+    write.csv(result, FILE_NAME, quote = F,row.names = F)
+    
+    
+  }
+  
+} 
+
+```
+
+###list significant brain features
+
+```{r}
+### making significant list 
+brainList<-function(target){
+  brain_list<-c()
+  for (i in 1:nrow(target)){
+    if (target[i,'BONF']<0.05){
+      brain_list<-rbind(brain_list,target[i,])
+    }
+  }
+
+  file_name<-paste0('~/Desktop/',deparse(substitute(target)),'_brain_list.csv')
+
+  write.csv(brain_list,file_name,row.names = F,quote = F)
+}
+
+CP_related<-read.csv('~/Desktop/GLM_mor_cov_CP_prsice2_corrected.csv')
+EA_related<-read.csv('~/Desktop/GLM_mor_cov_EA_prsice2_corrected.csv')
+
+brainList(CP_related)
+brainList(EA_related)
+
+```
+
+
+###PCA with significant brain features
+
+```{r}
+mor<-read.csv(file='mor_final.csv')
+CP<-read.csv(file='~/Desktop/CP_related_brain_list.csv')
+EA<-read.csv(file='~/Desktop/EA_related_brain_list.csv')
+
+## prep
+subject_list<-read.csv(file='final_phenotype_for_MM_european.csv')
+#subject_list<-subject_list[subject_list$sex==1,]
+#subject_list<-subject_list[subject_list$sex==2,]
+mor$subjectkey<-gsub("_","",mor$subjectkey)
+
+
+mor<-merge(mor,subject_list,by='subjectkey')
+
+mor<-na.omit(mor)
+names(mor)[996] #before running PCA must check column number of brain end
+brain_end<-996
+mor<-mor[,1:brain_end]
+
+
+
+
+####+++++ operation
+CP_extract<-CP[CP$BONF<0.05,]
+CP_list<-CP_extract$brain
+CP_mor<-subset(mor,select=c('subjectkey',CP_list))
+CP_mor<-merge(subject_list,mor,by='subjectkey')
+CP_mor<-subset(CP_mor,select=c('subjectkey',CP_list))
+
+
+EA_extract<-EA[EA$BONF<0.05,]
+EA_list<-EA_extract$brain
+EA_mor<-subset(mor,select=c('subjectkey',EA_list))
+EA_mor<-merge(subject_list,mor,by='subjectkey')
+EA_mor<-subset(EA_mor,select=c('subjectkey',EA_list))
+
+
+
+#save
+write.csv(CP_mor,file='CP_mor_extracted.csv',row.names=FALSE)
+write.csv(EA_mor,file='EA_mor_extracted.csv',row.names=FALSE)
+
+
+######By performing PCA, reduce statistically significant brain variables. And assign Principal Component(reduced brain variable) to subjects 
+CP_mor_filled<-CP_mor
+subjectkey<-CP_mor_filled[,1]
+CP_mor_filled_pca<-CP_mor_filled[,-1]  ##remove subjectkey column for PCA
+CP_pca<-prcomp(CP_mor_filled_pca,center=T,scale. = T)
+CP_pca_var<-as.matrix(CP_mor_filled_pca)%*%CP_pca$rotation[,1:10]#check cumulative Proportion to select how many PCs you need
+CP_PC_transformed<-cbind(subjectkey,as.data.frame(CP_pca_var))
+for(i in 2:ncol(CP_PC_transformed)){
+  CP_PC_transformed[,i]<-scale(CP_PC_transformed[,i])
+}
+CP_PC_transformed$PC1 <- -1*CP_PC_transformed$PC1
+
+EA_mor_filled<-EA_mor
+subjectkey<-EA_mor_filled[,1]
+EA_mor_filled_pca<-EA_mor_filled[,-1]  ##remove subjectkey column for PCA
+EA_pca<-prcomp(EA_mor_filled_pca,center=T,scale. = T)
+EA_pca_var<-as.matrix(EA_mor_filled_pca)%*%EA_pca$rotation[,1:10]#check cumulative Proportion to select how many PCs you need
+EA_PC_transformed<-cbind(subjectkey,as.data.frame(EA_pca_var))
+for(i in 2:ncol(EA_PC_transformed)){
+  EA_PC_transformed[,i]<-scale(EA_PC_transformed[,i])
+}
+
+##save
+write.csv(CP_PC_transformed,file='~/Desktop/CP_PCA_transformed.csv',row.names=FALSE)
+write.csv(EA_PC_transformed,file='~/Desktop/EA_PCA_transformed.csv',row.names=FALSE)
+
+
+```
+
+### before mediation modeling must check correlations between variables 
+#1: GPS-NIH
+```{r}
+#list for independent variable
+GPS_list<-c('CP','EA')
+
+#list for dependent variable
+nih_list<-c('nihtbx_totalcomp_uncorrected',	'nihtbx_fluidcomp_uncorrected',	'nihtbx_cryst_uncorrected')
+
+#list for covariate variable
+cat_var<-c('sex','married' , 'abcd_site')
+con_var<-c('age','high.educ','income','BMI')
+
+#join all list for dataset
+all_list<-c('subjectkey')
+all_list<-append(all_list,nih_list)
+all_list<-append(all_list,cat_var)
+all_list<-append(all_list,con_var)
+all_list<-append(all_list,GPS_list)
+#all_list<-append(all_list,PRS_COV_LIST)
+
+#loading datatset
+data<-read.csv(file='final_phenotype_for_MM_european.csv')
+data<-data[,all_list]
+#data<-data[data$sex==1,]
+#data<-data[data$sex==2,]
+
+
+
+#appending categorical and continuous covariates together 
+#cat_var<-cat_var[-1] only use for sex stratified analysis
+cov_list<-c()
+for (i in cat_var){
+  cov_list<-append(cov_list,paste0("factor(",i,")"))
+}
+cov_list<-append(cov_list,con_var)
+cov<- paste(cov_list, collapse=" + ")
+
+
+
+#glm 
+frame<-data.frame(nih_list)
+for (GPS in GPS_list){
+  glm.p<-vector()
+  glm.p.adjust<-vector()
+  glm.beta<-vector()
+  for (nih_name in nih_list) {
+    
+    form<-paste(nih_name,'~',GPS,'+',cov)
+    glm.re<-glm(as.formula(form),data=data,family=gaussian())
+    cff<-coef(summary(glm.re))
+    glm.p<-append(glm.p,round(cff[2,4],5))
+    glm.beta<-append(glm.beta,round(cff[2,1],5))
+    
+  }
+  
+  glm.p.adjust<-p.adjust(glm.p,method='bonf')
+  beta_name<-paste0(GPS,'_beta')
+  beta<-data.frame(glm.beta)
+  names(beta)<-beta_name
+  frame<-cbind(frame,beta)
+  p_name<-paste0(GPS,'_p')
+  p_name.adjust<-paste0(GPS,'_p_bonf_corrected')
+  p_values<-data.frame(glm.p)
+  p_values_cor<-data.frame(glm.p.adjust)
+  names(p_values)<-p_name
+  names(p_values_cor)<-p_name.adjust
+  frame<-cbind(frame,p_values)
+  frame<-cbind(frame,p_values_cor)
+}
+
+#saving
+write.csv(frame,file='~/Desktop/GPS-NIH_glm_bonf.csv',row.names=FALSE)
+
+```
+
+#2: PC-NIH
+```{r}
+#=========checking correlation between compressed brain variables and phenotypes 
+###preprocessing data
+#
+all_list<-c('subjectkey','CP','EA','age', 'sex', 'high.educ','income','married' ,'abcd_site', 'BMI','nihtbx_totalcomp_uncorrected',	'nihtbx_fluidcomp_uncorrected',	'nihtbx_cryst_uncorrected')
+nih_list<-c('nihtbx_totalcomp_uncorrected',	'nihtbx_fluidcomp_uncorrected',	'nihtbx_cryst_uncorrected')
+cat_var<-c( 'sex','married','abcd_site')
+con_var<-c('age','high.educ','income','BMI')
+
+
+#appending categorical and continuous variable together 
+cov_list<-c()
+for (i in cat_var){
+  cov_list<-append(cov_list,paste0("factor(",i,")"))
+}
+cov_list<-append(cov_list,con_var)
+cov<- paste(cov_list, collapse=" + ")
+
+
+CP_PC_transformed<-read.csv(file='~/Desktop/CP_PCA_transformed.csv')
+
+EA_PC_transformed<-read.csv(file='~/Desktop/EA_PCA_transformed.csv')
+data<-read.csv(file='final_phenotype_for_MM_european.csv')
+data<-data[,all_list]
+data<-na.omit(data) ## this line is for removing subjects with NA values. If you don't want to remove NA, then disable this line 
+
+CP_data<-merge(CP_PC_transformed,data,by='subjectkey')
+EA_data<-merge(EA_PC_transformed,data,by='subjectkey')
+
+
+
+#CP_data<-CP_data[CP_data$sex==1,]
+#EA_data<-EA_data[EA_data$sex==1,]
+#CP_data<-CP_data[CP_data$sex==2,]
+#EA_data<-EA_data[EA_data$sex==2,]
+
+###glm for CP
+CP_frame<-data.frame(nih_list)
+for (i in 1:10){ #####checking numbers of PC
+  glm.p<-vector()
+  glm.p.adjust<-vector()
+  glm.beta<-vector()
+  
+  for (nih_name in nih_list) {
+    
+    form<-paste0(nih_name,'~','PC',i,'+',cov)
+    glm.re<-glm(as.formula(form),data=CP_data,family=gaussian())
+    cff<-coef(summary(glm.re))
+    glm.p<-append(glm.p,round(cff[2,4],6))
+    glm.p.adjust<-p.adjust(glm.p,method='bonf')###fdr correction
+    glm.beta<-append(glm.beta,round(cff[2,1],6))
+  }
+  p_values<-data.frame(glm.p)
+  p_values_cor<-data.frame(glm.p.adjust)
+  beta<-data.frame(glm.beta)
+  col_name_p<-paste0('PC',i,'_p')
+  col_name_p_cor<-paste0('PC',i,'_p_cor')
+  col_name_beta<-paste0('PC',i,'_beta')
+  names(p_values)<-col_name_p
+  names(p_values_cor)<-col_name_p_cor
+  names(beta)<-col_name_beta
+  CP_frame<-cbind(CP_frame,p_values)
+  CP_frame<-cbind(CP_frame,p_values_cor)
+  CP_frame<-cbind(CP_frame,beta)
+}
+
+###glm for EA
+EA_frame<-data.frame(nih_list)
+for (i in 1:10){ #####checking numbers of PC
+  glm.p<-vector()
+  glm.p.adjust<-vector()
+  glm.beta<-vector()
+  
+  for (nih_name in nih_list) {
+    
+    form<-paste0(nih_name,'~','PC',i,'+',cov)
+    glm.re<-glm(as.formula(form),data=EA_data,family=gaussian())
+    cff<-coef(summary(glm.re))
+    glm.p<-append(glm.p,round(cff[2,4],6))
+    glm.p.adjust<-p.adjust(glm.p,method='bonf')###fdr correction
+    glm.beta<-append(glm.beta,round(cff[2,1],6))
+  }
+  p_values<-data.frame(glm.p)
+  p_values_cor<-data.frame(glm.p.adjust)
+  beta<-data.frame(glm.beta)
+  col_name_p<-paste0('PC',i,'_p')
+  col_name_p_cor<-paste0('PC',i,'_p_cor')
+  col_name_beta<-paste0('PC',i,'_beta')
+  names(p_values)<-col_name_p
+  names(p_values_cor)<-col_name_p_cor
+  names(beta)<-col_name_beta
+  EA_frame<-cbind(EA_frame,p_values)
+  EA_frame<-cbind(EA_frame,p_values_cor)
+  EA_frame<-cbind(EA_frame,beta)
+}
+
+
+write.csv(CP_frame,file='~/Desktop/CP_PC(mor)-pheno_glm.csv',row.names=FALSE)
+write.csv(EA_frame,file='~/Desktop/EA_PC(mor)-pheno_glm.csv',row.names=FALSE)
+
+```
+
+
+### checking moderation with suspicious moderator in Moderated Mediation 
+##1: checking moderation 
+#loading and preprocessing data
+```{r}
+## change categorical variable (K>2) to dummy variable
+pheno<-read.csv(file='final_phenotype_for_MM_european.csv')
+
+##merge brain data and phenotype data 
+CP_brain<-read.csv(file='~/Desktop/CP_PCA_transformed.csv')
+CP_brain<-subset(CP_brain,select=c('subjectkey','PC1'))   ######brain target
+CP_final<-merge(pheno,CP_brain,by='subjectkey')
+##check remaining NA
+CP_final<-na.omit(CP_final)
+#CP_final<-CP_final[CP_final$sex==1,]
+#CP_final<-CP_final[CP_final$sex==2,]
+
+EA_brain<-read.csv(file='~/Desktop/EA_PCA_transformed.csv')
+EA_brain<-subset(EA_brain,select=c('subjectkey','PC1'))   ######brain target
+EA_final<-merge(pheno,EA_brain,by='subjectkey')
+###check remaining NA
+EA_final<-na.omit(EA_final)
+#EA_final<-EA_final[EA_final$sex==1,]
+#EA_final<-EA_final[EA_final$sex==2,]
+```
+
+#defining function for moderation
+```{r}
+moderation<-function(GPS,cog_target,ELS_list,data){
+  list<-paste(GPS,"&",ELS_list)
+  
+  
+  ##=============first step. only ELS
+  COG<-paste0("nihtbx_",cog_target,"_uncorrected")
+  frame<-data.frame(ELS_list)
+  glm.p<-vector()
+  glm.beta<-vector()
+  for (ELS in ELS_list) {
+    form<-paste(COG,"~ ",GPS,"+",ELS,"+",cov)
+    result<-glm(as.formula(form),data=data,family=gaussian())
+    cff<-coef(summary(result))
+    glm.p<-append(glm.p,round(cff[3,4],5))
+    glm.beta<-append(glm.beta,round(cff[3,1],5))
+  }
+  
+  beta<-data.frame(glm.beta)
+  names(beta)<-"beta"
+  frame<-cbind(frame,beta)
+  p_values<-data.frame(glm.p)
+  names(p_values)<-"p_value"
+  frame<-cbind(frame,p_values)
+  bonf<-p.adjust(glm.p,method="bonf")
+  bonf<-data.frame(bonf)
+  names(bonf)<-'p_bonf_ corrected'
+  frame<-cbind(frame,bonf)
+  
+  ##=============second step. with interaction
+  frame_inter<-data.frame(list)
+  glm.p<-vector()
+  glm.beta<-vector()
+  for (ELS in ELS_list) {
+    interaction_term<-paste0(GPS,".",ELS)
+    interaction_var <- data[,GPS]*data[,ELS]
+    data <- cbind(data,interaction_var)
+    colnames(data)[ncol(data)] <- interaction_term
+    form<-paste(COG,"~ ",GPS,"+",interaction_term,"+",ELS,"+",cov)
+    result<-glm(as.formula(form),data=data,family=gaussian())
+    cff<-coef(summary(result))
+    #print(cff)
+    glm.p<-append(glm.p,round(cff[3,4],5))
+    glm.beta<-append(glm.beta,round(cff[3,1],5))
+  }
+  
+  beta<-data.frame(glm.beta)
+  names(beta)<-"beta"
+  frame_inter<-cbind(frame_inter,beta)
+  p_values<-data.frame(glm.p)
+  names(p_values)<-"p_value"
+  frame_inter<-cbind(frame_inter,p_values)
+  bonf<-p.adjust(glm.p,method="bonf")
+  bonf<-data.frame(bonf)
+  names(bonf)<-'p_bonf_ corrected'
+  frame_inter<-cbind(frame_inter,bonf)
+  
+  final<-cbind(frame,frame_inter)
+  
+  file_name<-paste0('~/Desktop/',GPS,'*ELS_',cog_target,'_moderate.csv')
+  write.csv(final,file=file_name,row.names=F,quote = F)
+  
+  
+}
+```
+
+#checking moderation. must check ELS_list, covariate list, intelligence list
+```{r}
+#setting ELS list
+ELS_list<-c("Ab","Ne","HC_all")
+#ELS_list <- c("HC_PSD","HC_CHM","HC_HSA","HC_MIH","HC_MTV","Ab_SA","Ab_PA","Ne_EN","Ne_PN")
+  #colnames(pheno)[29:37]
+
+#setting covariate list
+cat_var<-c( 'sex', 'married', 'abcd_site')
+con_var<-c('age','high.educ','income','BMI')
+cov_list<-c()
+
+#appending categorical and continuousv ariable together
+cov_list<-append(cov_list,con_var)
+cov<- paste(cov_list, collapse=" + ")
+
+
+#setting intelligence list
+intel_list<-c('cryst','totalcomp','fluidcomp')
+
+
+#analyzing for CP 
+GPS<-"CP"
+data<-CP_final
+for (intel in intel_list){
+  moderation(GPS,intel,ELS_list,data=data)
+}
+
+#analyzing for EA 
+GPS<-"EA"
+data<-EA_final
+for (intel in intel_list){
+  moderation(GPS,intel,ELS_list,data=data)
+}
+
+```
+
+
+
+
+##2: mediation and moderated mediation 
+#data loading and prep 
+```{r}
+
+```
+
+
+#running mediation 
+```{r}
+source('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Mediation_function.R')
+
+ELS_list <- c("Ab","Ne","HC_all")
+nih_list <- c("nihtbx_totalcomp_uncorrected","nihtbx_fluidcomp_uncorrected","nihtbx_cryst_uncorrected")
+
+
+EA_cryst <- EA_Mediation("nihtbx_cryst_uncorrected",1000)
+print("EA_cryst done")
+EA_total <- EA_Mediation("nihtbx_totalcomp_uncorrected",1000)
+print("EA_total done")
+EA_fluid <- EA_Mediation("nihtbx_fluidcomp_uncorrected",1000)
+print("EA_fluid done")
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Mediation_Experiment.RData')
+
+CP_cryst <- CP_Mediation("nihtbx_cryst_uncorrected",1000)
+print("CP_cryst done")
+CP_total <- CP_Mediation("nihtbx_totalcomp_uncorrected",1000)
+print("CP_total done")
+CP_fluid <- CP_Mediation("nihtbx_fluidcomp_uncorrected",1000)
+print("CP fluid done")
+
+
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Mediation_Experiment.RData')
+
+```
+
+#running moderated mediation. Main scale
+```{r}
+## === A path === ##
+source('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/MM_function.R')
+
+ELS_list <- c("Ab","Ne","HC_all")
+nih_list <- c("nihtbx_totalcomp_uncorrected","nihtbx_fluidcomp_uncorrected","nihtbx_cryst_uncorrected")
+
+
+EA_Ab_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab",1000)
+print("EA_Ab_cryst done")
+EA_Ab_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ab",1000)
+print("EA_Ab_total done")
+EA_Ab_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ab",1000)
+print("EA_Ab_fluid done")
+
+
+EA_Ne_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","Ne",1000)
+print("EA_Ne_cryst done")
+EA_Ne_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ne",1000)
+print("EA_Ne_total done")
+EA_Ne_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ne",1000)
+print("EA_Ne_fluid done")
+
+EA_HC_all_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_all",1000)
+print("EA_HC_all_cryst done")
+EA_HC_all_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_all",1000)
+print("EA_HC_all_total done")
+EA_HC_all_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_all",1000)
+print("EA_HC_all_fluid done")
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment.RData')
+
+CP_Ab_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab",1000)
+print("CP_Ab_cryst done")
+CP_Ab_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ab",1000)
+print("CP_Ab_total done")
+CP_Ab_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ab",1000)
+print("CP_Ab_fluid done")
+
+
+CP_Ne_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","Ne",1000)
+print("CP_Ne_cryst done")
+CP_Ne_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ne",1000)
+print("CP_Ne_total done")
+CP_Ne_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ne",1000)
+print("CP_Ne_fluid done")
+
+CP_HC_all_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_all",1000)
+print("CP_HC_all_cryst done")
+CP_HC_all_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_all",1000)
+print("CP_HC_all_total done")
+CP_HC_all_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_all",1000)
+print("CP_HC_all_fluid done")
+
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment.RData')
+
+print('all done')
+
+## ============= ##
+
+## === B path === ##
+source('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/MM_function_Bpath.R')
+
+ELS_list <- c("Ab","Ne","HC_all")
+nih_list <- c("nihtbx_totalcomp_uncorrected","nihtbx_fluidcomp_uncorrected","nihtbx_cryst_uncorrected")
+
+
+EA_Ab_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab",1000)
+print("EA_Ab_cryst done")
+EA_Ab_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ab",1000)
+print("EA_Ab_total done")
+EA_Ab_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ab",1000)
+print("EA_Ab_fluid done")
+
+
+EA_Ne_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","Ne",1000)
+print("EA_Ne_cryst done")
+EA_Ne_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ne",1000)
+print("EA_Ne_total done")
+EA_Ne_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ne",1000)
+print("EA_Ne_fluid done")
+
+EA_HC_all_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_all",1000)
+print("EA_HC_all_cryst done")
+EA_HC_all_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_all",1000)
+print("EA_HC_all_total done")
+EA_HC_all_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_all",1000)
+print("EA_HC_all_fluid done")
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_Bpath.RData')
+
+CP_Ab_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab",1000)
+print("CP_Ab_cryst done")
+CP_Ab_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ab",1000)
+print("CP_Ab_total done")
+CP_Ab_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ab",1000)
+print("CP_Ab_fluid done")
+
+
+CP_Ne_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","Ne",1000)
+print("CP_Ne_cryst done")
+CP_Ne_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ne",1000)
+print("CP_Ne_total done")
+CP_Ne_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ne",1000)
+print("CP_Ne_fluid done")
+
+CP_HC_all_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_all",1000)
+print("CP_HC_all_cryst done")
+CP_HC_all_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_all",1000)
+print("CP_HC_all_total done")
+CP_HC_all_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_all",1000)
+print("CP_HC_all_fluid done")
+
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_Bpath.RData')
+
+print('all done')
+
+## ============= ##
+```
+
+#running moderated mediation. sub scale and A path 
+```{r}
+source('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/MM_function.R')
+
+## === crystallized intelligence === ##
+EA_Ab_SA_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab_SA",1000)
+EA_Ab_PA_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab_PA",1000)
+print("EA_Ab_cryst done")
+
+
+
+EA_Ne_EN_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","Ne_EN",1000)
+EA_Ne_PN_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","Ne_PN",1000)
+print("EA_Ne_cryst done")
+
+EA_HC_MIH_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_MIH",1000)
+EA_HC_MTV_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_MTV",1000)
+EA_HC_HSA_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_HSA",1000)
+EA_HC_CHM_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_CHM",1000)
+#EA_HC_PSD_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_PSD",10)
+print("EA_HC_all_cryst done")
+
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_sub_cryst.RData')
+
+
+
+CP_Ab_SA_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab_SA",1000)
+CP_Ab_PA_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab_PA",1000)
+print("CP_Ab_cryst done")
+
+
+
+CP_Ne_EN_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","Ne_EN",1000)
+CP_Ne_PN_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","Ne_PN",1000)
+print("CP_Ne_cryst done")
+
+CP_HC_MIH_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_MIH",1000)
+CP_HC_MTV_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_MTV",1000)
+CP_HC_HSA_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_HSA",1000)
+CP_HC_CHM_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_CHM",1000)
+#CP_HC_PSD_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_PSD",10)
+print("CP_HC_all_cryst done")
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_sub_cryst.RData')
+
+print('all done')
+
+## ============= ##
+
+## === fluid intelligence === ##
+EA_Ab_SA_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ab_SA",1000)
+EA_Ab_PA_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ab_PA",1000)
+print("EA_Ab_cryst done")
+
+
+
+EA_Ne_EN_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ne_EN",1000)
+EA_Ne_PN_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ne_PN",1000)
+print("EA_Ne_cryst done")
+
+EA_HC_MIH_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_MIH",1000)
+EA_HC_MTV_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_MTV",1000)
+EA_HC_HSA_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_HSA",1000)
+EA_HC_CHM_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_CHM",1000)
+#EA_HC_PSD_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_PSD",10)
+print("EA_HC_all_cryst done")
+
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_sub_fluid.RData')
+
+
+
+CP_Ab_SA_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ab_SA",1000)
+CP_Ab_PA_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ab_PA",1000)
+print("CP_Ab_cryst done")
+
+
+
+CP_Ne_EN_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ne_EN",1000)
+CP_Ne_PN_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ne_PN",1000)
+print("CP_Ne_cryst done")
+
+CP_HC_MIH_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_MIH",1000)
+CP_HC_MTV_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_MTV",1000)
+CP_HC_HSA_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_HSA",1000)
+CP_HC_CHM_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_CHM",1000)
+#CP_HC_PSD_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_PSD",10)
+print("CP_HC_all_cryst done")
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_sub_fluid.RData')
+
+print('all done')
+## ============= ##
+
+## === total intelligence === ##
+EA_Ab_SA_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ab_SA",1000)
+EA_Ab_PA_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ab_PA",1000)
+print("EA_Ab_cryst done")
+
+
+
+EA_Ne_EN_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ne_EN",1000)
+EA_Ne_PN_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ne_PN",1000)
+print("EA_Ne_cryst done")
+
+EA_HC_MIH_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_MIH",1000)
+EA_HC_MTV_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_MTV",1000)
+EA_HC_HSA_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_HSA",1000)
+EA_HC_CHM_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_CHM",1000)
+#EA_HC_PSD_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_PSD",10)
+print("EA_HC_all_cryst done")
+
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_sub_total.RData')
+
+
+
+CP_Ab_SA_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ab_SA",1000)
+CP_Ab_PA_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ab_PA",1000)
+print("CP_Ab_cryst done")
+
+
+
+CP_Ne_EN_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ne_EN",1000)
+CP_Ne_PN_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ne_PN",1000)
+print("CP_Ne_cryst done")
+
+CP_HC_MIH_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_MIH",1000)
+CP_HC_MTV_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_MTV",1000)
+CP_HC_HSA_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_HSA",1000)
+CP_HC_CHM_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_CHM",1000)
+#CP_HC_PSD_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_PSD",10)
+print("CP_HC_all_cryst done")
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_sub_total.RData')
+
+print('all done')
+## ============= ##
+
+```
+
+
+#running moderated mediation. sub scale and B path 
+```{r}
+source('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/MM_function_Bpath.R')
+
+## === crystallized intelligence === ##
+EA_Ab_PA_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab_PA",1000)
+EA_Ab_SA_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab_SA",1000)
+print("EA_Ab_cryst done")
+
+
+
+EA_Ne_PN_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","Ne_PN",1000)
+EA_Ne_EN_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","Ne_EN",1000)
+print("EA_Ne_cryst done")
+
+
+EA_HC_MTV_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_MTV",1000)
+EA_HC_MIH_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_MIH",1000)
+#EA_HC_PSD_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_PSD",10)
+EA_HC_CHM_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_CHM",1000)
+EA_HC_HSA_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_HSA",1000)
+print("EA_HC_all_cryst done")
+
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_Bpath_sub_cryst.RData')
+
+CP_Ab_PA_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab_PA",1000)
+CP_Ab_SA_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab_SA",1000)
+print("EA_Ab_cryst done")
+
+
+
+CP_Ne_PN_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","Ne_PN",1000)
+CP_Ne_EN_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","Ne_EN",1000)
+print("EA_Ne_cryst done")
+
+
+CP_HC_MTV_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_MTV",1000)
+CP_HC_MIH_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_MIH",1000)
+#CP_HC_PSD_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_PSD",10)
+CP_HC_CHM_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_CHM",1000)
+CP_HC_HSA_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_HSA",1000)
+print("EA_HC_all_cryst done")
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_Bpath_sub_cryst.RData')
+
+print('all done')
+## ============= ##
+
+
+## === fluid intelligence === ##
+EA_Ab_PA_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ab_PA",1000)
+EA_Ab_SA_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ab_SA",1000)
+print("EA_Ab_cryst done")
+
+
+
+EA_Ne_PN_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ne_PN",1000)
+EA_Ne_EN_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ne_EN",1000)
+print("EA_Ne_cryst done")
+
+
+EA_HC_MTV_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_MTV",1000)
+EA_HC_MIH_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_MIH",1000)
+#EA_HC_PSD_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_PSD",10)
+EA_HC_CHM_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_CHM",1000)
+EA_HC_HSA_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_HSA",1000)
+print("EA_HC_all_cryst done")
+
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_Bpath_sub_fluid.RData')
+
+CP_Ab_PA_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ab_PA",1000)
+CP_Ab_SA_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ab_SA",1000)
+print("EA_Ab_cryst done")
+
+
+
+CP_Ne_PN_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ne_PN",1000)
+CP_Ne_EN_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ne_EN",1000)
+print("EA_Ne_cryst done")
+
+
+CP_HC_MTV_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_MTV",1000)
+CP_HC_MIH_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_MIH",1000)
+#CP_HC_PSD_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_PSD",10)
+CP_HC_CHM_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_CHM",1000)
+CP_HC_HSA_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_HSA",1000)
+print("EA_HC_all_cryst done")
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_Bpath_sub_fluid.RData')
+
+print('all done')
+
+## ============= ##
+
+
+## === total intelligence === ##
+EA_Ab_PA_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ab_PA",1000)
+EA_Ab_SA_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ab_SA",1000)
+print("EA_Ab_cryst done")
+
+
+
+EA_Ne_PN_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ne_PN",1000)
+EA_Ne_EN_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ne_EN",1000)
+print("EA_Ne_cryst done")
+
+
+EA_HC_MTV_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_MTV",1000)
+EA_HC_MIH_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_MIH",1000)
+#EA_HC_PSD_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_PSD",10)
+EA_HC_CHM_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_CHM",1000)
+EA_HC_HSA_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_HSA",1000)
+print("EA_HC_all_cryst done")
+
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_Bpath_sub_total.RData')
+
+CP_Ab_PA_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ab_PA",1000)
+CP_Ab_SA_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ab_SA",1000)
+print("EA_Ab_cryst done")
+
+
+
+CP_Ne_PN_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ne_PN",1000)
+CP_Ne_EN_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ne_EN",1000)
+print("EA_Ne_cryst done")
+
+
+CP_HC_MTV_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_MTV",1000)
+CP_HC_MIH_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_MIH",1000)
+#CP_HC_PSD_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_PSD",10)
+CP_HC_CHM_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_CHM",1000)
+CP_HC_HSA_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_HSA",1000)
+print("EA_HC_all_cryst done")
+save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_Bpath_sub_total.RData')
+
+print('all done')
+## ============= ##
+
+```
+
