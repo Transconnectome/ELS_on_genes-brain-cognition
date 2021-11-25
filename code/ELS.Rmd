@@ -260,6 +260,143 @@ for (GPS in GPS_list){
 write.csv(frame,file='~/Desktop/GPS-NIH_glm_bonf.csv',row.names=FALSE)
 
 ```
+#3: GPS-PC
+```{r}
+all_list<-c('subjectkey','CP','EA','age', 'sex', 'high.educ','income','married' ,'abcd_site', 'BMI','nihtbx_totalcomp_uncorrected',	'nihtbx_fluidcomp_uncorrected',	'nihtbx_cryst_uncorrected')
+nih_list<-c('nihtbx_totalcomp_uncorrected',	'nihtbx_fluidcomp_uncorrected',	'nihtbx_cryst_uncorrected')
+GPS_list <- c('CP','EA')
+cat_var<-c( 'sex','married','abcd_site')
+con_var<-c('age','high.educ','income','BMI')
+
+
+#appending categorical and continuous variable together 
+cov_list<-c()
+for (i in cat_var){
+  cov_list<-append(cov_list,paste0("factor(",i,")"))
+}
+cov_list<-append(cov_list,con_var)
+cov<- paste(cov_list, collapse=" + ")
+
+
+CP_PC_transformed<-read.csv(file='~/Desktop/COGGPS_PAPER/only_EU/CP_PCA_transformed.csv')
+
+EA_PC_transformed<-read.csv(file='~/Desktop/COGGPS_PAPER/only_EU/EA_PCA_transformed.csv')
+data<-read.csv(file='~/Desktop/COGGPS_PAPER/only_EU/final_phenotype_for_MM_european.csv')
+data<-data[,all_list]
+data<-na.omit(data) ## this line is for removing subjects with NA values. If you don't want to remove NA, then disable this line 
+
+CP_data<-merge(CP_PC_transformed,data,by='subjectkey')
+EA_data<-merge(EA_PC_transformed,data,by='subjectkey')
+
+
+
+#CP_data<-CP_data[CP_data$sex==1,]
+#EA_data<-EA_data[EA_data$sex==1,]
+#CP_data<-CP_data[CP_data$sex==2,]
+#EA_data<-EA_data[EA_data$sex==2,]
+
+###glm for CP
+CP_frame<-data.frame(GPS_list)
+for (i in 1:10){ #####checking numbers of PC
+  glm.p<-vector()
+  glm.p.adjust<-vector()
+  glm.beta<-vector()
+  
+  for (gps in GPS_list) {
+    
+    form<-paste0(gps,'~','PC',i,'+',cov)
+    glm.re<-glm(as.formula(form),data=CP_data,family=gaussian())
+    cff<-coef(summary(glm.re))
+    glm.p<-append(glm.p,round(cff[2,4],6))
+    glm.p.adjust<-p.adjust(glm.p,method='bonf')###fdr correction
+    glm.beta<-append(glm.beta,round(cff[2,1],6))
+  }
+  p_values<-data.frame(glm.p)
+  p_values_cor<-data.frame(glm.p.adjust)
+  beta<-data.frame(glm.beta)
+  col_name_p<-paste0('PC',i,'_p')
+  col_name_p_cor<-paste0('PC',i,'_p_cor')
+  col_name_beta<-paste0('PC',i,'_beta')
+  names(p_values)<-col_name_p
+  names(p_values_cor)<-col_name_p_cor
+  names(beta)<-col_name_beta
+  CP_frame<-cbind(CP_frame,p_values)
+  CP_frame<-cbind(CP_frame,p_values_cor)
+  CP_frame<-cbind(CP_frame,beta)
+}
+
+###glm for EA
+EA_frame<-data.frame(GPS_list)
+for (i in 1:10){ #####checking numbers of PC
+  glm.p<-vector()
+  glm.p.adjust<-vector()
+  glm.beta<-vector()
+  
+  for (gps in GPS_list) {
+    
+    form<-paste0(gps,'~','PC',i,'+',cov)
+    glm.re<-glm(as.formula(form),data=EA_data,family=gaussian())
+    cff<-coef(summary(glm.re))
+    glm.p<-append(glm.p,round(cff[2,4],6))
+    glm.p.adjust<-p.adjust(glm.p,method='bonf')###fdr correction
+    glm.beta<-append(glm.beta,round(cff[2,1],6))
+  }
+  p_values<-data.frame(glm.p)
+  p_values_cor<-data.frame(glm.p.adjust)
+  beta<-data.frame(glm.beta)
+  col_name_p<-paste0('PC',i,'_p')
+  col_name_p_cor<-paste0('PC',i,'_p_cor')
+  col_name_beta<-paste0('PC',i,'_beta')
+  names(p_values)<-col_name_p
+  names(p_values_cor)<-col_name_p_cor
+  names(beta)<-col_name_beta
+  EA_frame<-cbind(EA_frame,p_values)
+  EA_frame<-cbind(EA_frame,p_values_cor)
+  EA_frame<-cbind(EA_frame,beta)
+}
+
+write.csv(CP_frame,file='~/Desktop/COGGPS_PAPER/only_EU/CP_PC(mor)-CPGPS_glm.csv',row.names=FALSE)
+write.csv(EA_frame,file='~/Desktop/COGGPS_PAPER/only_EU/EA_PC(mor)-EAGPS_glm.csv',row.names=FALSE)
+
+
+## ============================ ##
+glm_intel_ELS<-function(cog_target,ELS_list,data){
+  
+  
+  
+  ##=============first step. only ELS
+  COG<-paste0("nihtbx_",cog_target,"_uncorrected")
+  frame<-data.frame(ELS_list)
+  glm.p<-vector()
+  glm.beta<-vector()
+  for (ELS in ELS_list) {
+    form<-paste(COG,"~ ",ELS,"+",cov)
+    result<-glm(as.formula(form),data=data,family=gaussian())
+    cff<-coef(summary(result))
+    print(cff)
+    print(cff)
+    glm.p<-append(glm.p,round(cff[2,4],5))
+    glm.beta<-append(glm.beta,round(cff[2,1],5))
+  }
+  
+  beta<-data.frame(glm.beta)
+  names(beta)<-"beta"
+  frame<-cbind(frame,beta)
+  p_values<-data.frame(glm.p)
+  names(p_values)<-"p_value"
+  frame<-cbind(frame,p_values)
+  bonf<-p.adjust(glm.p,method="bonf")
+  bonf<-data.frame(bonf)
+  names(bonf)<-'p_bonf_ corrected'
+  frame<-cbind(frame,bonf)
+  
+
+  
+  file_name<-paste0('~/Desktop/COGGPS_PAPER/only_EU/ELS_' ,cog_target,'_glm.csv')
+  write.csv(frame,file=file_name,row.names=F,quote = F)
+
+}
+```
 
 #2: PC-NIH
 ```{r}
@@ -366,7 +503,74 @@ write.csv(EA_frame,file='~/Desktop/EA_PC(mor)-pheno_glm.csv',row.names=FALSE)
 
 
 ### checking moderation with suspicious moderator in Moderated Mediation 
-##1: checking moderation 
+##1: checking correlation between ELS and NIH tbx
+```{r}
+glm_intel_ELS<-function(cog_target,ELS_list,data){
+  COG<-paste0("nihtbx_",cog_target,"_uncorrected")
+  frame<-data.frame(ELS_list)
+  glm.p<-vector()
+  glm.beta<-vector()
+  for (ELS in ELS_list) {
+    form<-paste(COG,"~ ",ELS,"+",cov)
+    result<-glm(as.formula(form),data=data,family=gaussian())
+    cff<-coef(summary(result))
+    print(cff)
+    print(cff)
+    glm.p<-append(glm.p,round(cff[2,4],5))
+    glm.beta<-append(glm.beta,round(cff[2,1],5))
+  }
+  
+  beta<-data.frame(glm.beta)
+  names(beta)<-"beta"
+  frame<-cbind(frame,beta)
+  p_values<-data.frame(glm.p)
+  names(p_values)<-"p_value"
+  frame<-cbind(frame,p_values)
+  bonf<-p.adjust(glm.p,method="bonf")
+  bonf<-data.frame(bonf)
+  names(bonf)<-'p_bonf_ corrected'
+  frame<-cbind(frame,bonf)
+  
+
+  
+  file_name<-paste0('~/Desktop/COGGPS_PAPER/only_EU/ELS_' ,cog_target,'_glm.csv')
+  write.csv(frame,file=file_name,row.names=F,quote = F)
+  
+  
+  
+}
+
+
+ELS_list<-c("Ab","Ne","HC_all")
+#ELS_list <- c("HC_PSD","HC_CHM","HC_HSA","HC_MIH","HC_MTV","Ab_SA","Ab_PA","Ne_EN","Ne_PN")
+#colnames(pheno)[29:37]
+
+#setting covariate list
+cat_var<-c( 'sex', 'married', 'abcd_site')
+con_var<-c('age','high.educ','income','BMI')
+cov_list<-c()
+
+#appending categorical and continuousv ariable together
+cov_list<-c()
+for (i in cat_var){
+  cov_list<-append(cov_list,paste0("factor(",i,")"))
+}
+cov_list<-append(cov_list,con_var)
+cov<- paste(cov_list, collapse=" + ")
+
+
+#setting intelligence list
+intel_list<-c('cryst','totalcomp','fluidcomp')
+
+data<-read.csv(file='~/Desktop/COGGPS_PAPER/only_EU/final_phenotype_for_MM_european.csv')
+
+for (intel in intel_list){
+  glm_intel_ELS(intel,ELS_list,data=data)
+}
+
+```
+
+##2: checking moderation 
 #loading and preprocessing data
 ```{r}
 ## change categorical variable (K>2) to dummy variable
@@ -460,8 +664,8 @@ moderation<-function(GPS,cog_target,ELS_list,data){
 #checking moderation. must check ELS_list, covariate list, intelligence list
 ```{r}
 #setting ELS list
-ELS_list<-c("Ab","Ne","HC_all")
-#ELS_list <- c("HC_PSD","HC_CHM","HC_HSA","HC_MIH","HC_MTV","Ab_SA","Ab_PA","Ne_EN","Ne_PN")
+#ELS_list<-c("Ab","Ne","HC_all")
+ELS_list <- c("HC_PSD","HC_CHM","HC_HSA","HC_MIH","HC_MTV","Ab_SA","Ab_PA","Ne_EN","Ne_PN")
   #colnames(pheno)[29:37]
 
 #setting covariate list
@@ -470,6 +674,10 @@ con_var<-c('age','high.educ','income','BMI')
 cov_list<-c()
 
 #appending categorical and continuousv ariable together
+cov_list<-c()
+for (i in cat_var){
+  cov_list<-append(cov_list,paste0("factor(",i,")"))
+}
 cov_list<-append(cov_list,con_var)
 cov<- paste(cov_list, collapse=" + ")
 
@@ -497,7 +705,7 @@ for (intel in intel_list){
 
 
 
-##2: mediation and moderated mediation 
+##3: mediation and moderated mediation 
 #data loading and prep 
 ```{r}
 
