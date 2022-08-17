@@ -257,7 +257,7 @@ for (GPS in GPS_list){
 }
 
 #saving
-write.csv(frame,file='~/Desktop/COGGPS_PAPER/only_EU/fdr_result/GPS-NIH_glm_fdr.csv',row.names=FALSE)
+write.csv(frame,file='~/Desktop/COGGPS_PAPER/only_EU/GPS-NIH_glm_fdr.csv',row.names=FALSE)
 
 ```
 #3: GPS-PC
@@ -355,8 +355,8 @@ for (i in 1:10){ #####checking numbers of PC
   EA_frame<-cbind(EA_frame,beta)
 }
 
-write.csv(CP_frame,file='~/Desktop/COGGPS_PAPER/only_EU/fdr_result/CP_PC(mor)-CPGPS_glm_fdr.csv',row.names=FALSE)
-write.csv(EA_frame,file='~/Desktop/COGGPS_PAPER/only_EU/fdr_result/EA_PC(mor)-EAGPS_glm_fdr.csv',row.names=FALSE)
+write.csv(CP_frame,file='~/Desktop/COGGPS_PAPER/only_EU/CP_PC(mor)-CPGPS_glm_fdr.csv',row.names=FALSE)
+write.csv(EA_frame,file='~/Desktop/COGGPS_PAPER/only_EU/EA_PC(mor)-EAGPS_glm_fdr.csv',row.names=FALSE)
 
 ```
 
@@ -458,8 +458,8 @@ for (i in 1:10){ #####checking numbers of PC
 }
 
 
-write.csv(CP_frame,file='~/Desktop/COGGPS_PAPER/only_EU/fdr_result/CP_PC(mor)-pheno_glm_fdr.csv',row.names=FALSE)
-write.csv(EA_frame,file='~/Desktop/COGGPS_PAPER/only_EU/fdr_result/EA_PC(mor)-pheno_glm_fdr.csv',row.names=FALSE)
+write.csv(CP_frame,file='~/Desktop/COGGPS_PAPER/only_EU/CP_PC(mor)-pheno_glm_fdr.csv',row.names=FALSE)
+write.csv(EA_frame,file='~/Desktop/COGGPS_PAPER/only_EU/EA_PC(mor)-pheno_glm_fdr.csv',row.names=FALSE)
 
 ```
 
@@ -495,7 +495,7 @@ glm_intel_ELS<-function(cog_target,ELS_list,data){
   
 
   
-  file_name<-paste0('~/Desktop/COGGPS_PAPER/only_EU/fdr_result/subscale/ELS_' ,cog_target,'_glm_fdr.csv')
+  file_name<-paste0('~/Desktop/COGGPS_PAPER/only_EU/fdr_result/supplementary/main_scale/ELS_' ,cog_target,'_glm_fdr.csv')
   write.csv(frame,file=file_name,row.names=F,quote = F)
   print(frame)
   
@@ -504,8 +504,8 @@ glm_intel_ELS<-function(cog_target,ELS_list,data){
 }
 
 
-#ELS_list<-c("Ab","Ne","HC_all")
-ELS_list <- c("HC_PSD","HC_CHM","HC_HSA","HC_MIH","HC_MTV","Ab_SA","Ab_PA","Ne_EN","Ne_PN")
+ELS_list<-c("Ab","Ne","HC_all")
+#ELS_list <- c("HC_PSD","HC_CHM","HC_HSA","HC_MIH","HC_MTV","Ab_SA","Ab_PA","Ne_EN","Ne_PN")
 #colnames(pheno)[29:37]
 
 #setting covariate list
@@ -557,7 +557,8 @@ EA_final<-na.omit(EA_final)
 #EA_final<-EA_final[EA_final$sex==2,]
 ```
 
-#defining function for moderation
+###### supplementary 
+#defining function for moderation. Ref: PMID: 24135711
 ```{r}
 moderation<-function(GPS,cog_target,ELS_list,data){
   list<-paste(GPS,"&",ELS_list)
@@ -573,7 +574,6 @@ moderation<-function(GPS,cog_target,ELS_list,data){
     result<-glm(as.formula(form),data=data,family=gaussian())
     cff<-coef(summary(result))
     glm.p<-append(glm.p,round(cff[3,4],5))
-    
     glm.beta<-append(glm.beta,round(cff[3,1],5))
   }
   
@@ -597,6 +597,15 @@ moderation<-function(GPS,cog_target,ELS_list,data){
   glm.beta.gps <- vector()
   glm.beta.ELS <- vector()
   for (ELS in ELS_list) {
+    tmp_cov_list <- c()
+    for (cov_i in c('sex','income','high.educ')){
+      tmp_cov_list <- append(tmp_cov_list,paste(GPS,":",cov_i))
+      tmp_cov_list <- append(tmp_cov_list,paste(ELS,":",cov_i))
+      
+    }
+    tmp_cov_list <- append(tmp_cov_list, cov_list)
+    cov <- paste0(tmp_cov_list, collapse='+')
+    #print(cov)
     interaction_term<-paste0(GPS,".",ELS)
     interaction_var <- data[,GPS]*data[,ELS]
     data <- cbind(data,interaction_var)
@@ -610,7 +619,6 @@ moderation<-function(GPS,cog_target,ELS_list,data){
     glm.beta<-append(glm.beta,round(cff[3,1],5))
     glm.beta.gps <- append(glm.beta.gps, round(cff[2,1],5))
     glm.beta.ELS <- append(glm.beta.ELS, round(cff[4,1],5))
-    
   }
   
   beta<-data.frame(glm.beta)
@@ -646,11 +654,9 @@ moderation<-function(GPS,cog_target,ELS_list,data){
   names(fdr.ELS)<-'p.ELS_fdr_ corrected'
   frame_inter<-cbind(frame_inter,fdr.ELS)
   
-  #final<-cbind(frame,frame_inter)
-  
-  file_name<-paste0('~/Desktop/COGGPS_PAPER/only_EU/fdr_result/moderation_main_scale/',GPS,'*ELS_',cog_target,'_moderate.csv')
+  file_name<-paste0('~/Desktop/COGGPS_PAPER/only_EU/fdr_result/supplementary/moderation_subscale/',GPS,'*ELS_',cog_target,'_moderate.csv')
   write.csv(frame_inter,file=file_name,row.names=F,quote = F)
-  
+  #print(final)
   
   
 }
@@ -661,8 +667,8 @@ moderation<-function(GPS,cog_target,ELS_list,data){
 ```{r}
 #setting ELS list
 
-ELS_list<-c("Ab","Ne","HC_all")
-#ELS_list <- c("HC_PSD","HC_CHM","HC_HSA","HC_MIH","HC_MTV","Ab_SA","Ab_PA","Ne_EN","Ne_PN")
+#ELS_list<-c("Ab","Ne","HC_all")
+ELS_list <- c("HC_PSD","HC_CHM","HC_HSA","HC_MIH","HC_MTV","Ab_SA","Ab_PA","Ne_EN","Ne_PN")
   #colnames(pheno)[29:37]
 
 #setting covariate list
@@ -743,7 +749,7 @@ save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/M
 #running moderated mediation. Main scale
 ```{r}
 ## === A path === ##
-source('/Users/wangheehwan/Desktop/COGGPS_PAPER/only_EU/MM_function.R')
+source('/Users/wangheehwan/Desktop/COGGPS_PAPER/only_EU/MM_function_supp.R')
 
 ELS_list <- c("Ab","Ne","HC_all")
 nih_list <- c("nihtbx_totalcomp_uncorrected","nihtbx_fluidcomp_uncorrected","nihtbx_cryst_uncorrected")
@@ -794,14 +800,14 @@ print("CP_HC_all_total done")
 CP_HC_all_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_all",1000)
 print("CP_HC_all_fluid done")
 
-#save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment.RData')
+save.image('~/Desktop/COGGPS_PAPER/only_EU/fdr_result/supplementary/MM_main_scale/Experiment_Apath.RData')
 
 print('all done')
 
 ## ============= ##
 
 ## === B path === ##
-source('/Users/wangheehwan/Desktop/COGGPS_PAPER/only_EU/MM_function_Bpath.R')
+source('/Users/wangheehwan/Desktop/COGGPS_PAPER/only_EU/MM_function_supp_Bpath.R')
 
 ELS_list <- c("Ab","Ne","HC_all")
 nih_list <- c("nihtbx_totalcomp_uncorrected","nihtbx_fluidcomp_uncorrected","nihtbx_cryst_uncorrected")
@@ -852,7 +858,7 @@ print("CP_HC_all_total done")
 CP_HC_all_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_all",1000)
 print("CP_HC_all_fluid done")
 
-#save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_Bpath.RData')
+save.image('~/Desktop/COGGPS_PAPER/only_EU/fdr_result/supplementary/MM_main_scale/Experiment__Bpath.RData')
 
 print('all done')
 
@@ -861,7 +867,7 @@ print('all done')
 
 #running moderated mediation. sub scale and A path 
 ```{r}
-source('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/MM_function.R')
+source('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/MM_function_supp.R')
 
 ## === crystallized intelligence === ##
 EA_Ab_SA_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab_SA",1000)
@@ -881,7 +887,6 @@ EA_HC_CHM_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_CHM",10
 #EA_HC_PSD_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_PSD",10)
 print("EA_HC_all_cryst done")
 
-save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_sub_cryst.RData')
 
 
 
@@ -901,7 +906,7 @@ CP_HC_HSA_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_HSA",10
 CP_HC_CHM_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_CHM",1000)
 #CP_HC_PSD_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_PSD",10)
 print("CP_HC_all_cryst done")
-save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_sub_cryst.RData')
+save.image('~/Desktop/COGGPS_PAPER/only_EU/fdr_result/supplementary/MM_subscale/Experiment_Apath_sub_cryst.RData')
 
 print('all done')
 
@@ -925,7 +930,7 @@ EA_HC_CHM_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_CHM
 #EA_HC_PSD_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_PSD",10)
 print("EA_HC_all_cryst done")
 
-save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_sub_fluid.RData')
+
 
 
 
@@ -945,7 +950,7 @@ CP_HC_HSA_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_HSA
 CP_HC_CHM_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_CHM",1000)
 #CP_HC_PSD_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_PSD",10)
 print("CP_HC_all_cryst done")
-save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_sub_fluid.RData')
+save.image('~/Desktop/COGGPS_PAPER/only_EU/fdr_result/supplementary/MM_subscale/Experiment_Apath_sub_fluid.RData')
 
 print('all done')
 ## ============= ##
@@ -968,7 +973,7 @@ EA_HC_CHM_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_CHM
 #EA_HC_PSD_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_PSD",10)
 print("EA_HC_all_cryst done")
 
-save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_sub_total.RData')
+
 
 
 
@@ -988,7 +993,7 @@ CP_HC_HSA_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_HSA
 CP_HC_CHM_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_CHM",1000)
 #CP_HC_PSD_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_PSD",10)
 print("CP_HC_all_cryst done")
-save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_sub_total.RData')
+save.image('~/Desktop/COGGPS_PAPER/only_EU/fdr_result/supplementary/MM_subscale/Experiment_Apath_sub_total.RData')
 
 print('all done')
 ## ============= ##
@@ -998,7 +1003,7 @@ print('all done')
 
 #running moderated mediation. sub scale and B path 
 ```{r}
-source('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/MM_function_Bpath.R')
+source('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/MM_function_supp_Bpath.R')
 
 ## === crystallized intelligence === ##
 EA_Ab_PA_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab_PA",1000)
@@ -1019,7 +1024,7 @@ EA_HC_CHM_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_CHM",10
 EA_HC_HSA_cryst <- EA_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_HSA",1000)
 print("EA_HC_all_cryst done")
 
-save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_Bpath_sub_cryst.RData')
+
 
 CP_Ab_PA_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab_PA",1000)
 CP_Ab_SA_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","Ab_SA",1000)
@@ -1038,7 +1043,7 @@ CP_HC_MIH_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_MIH",10
 CP_HC_CHM_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_CHM",1000)
 CP_HC_HSA_cryst <- CP_Moderated_Mediation("nihtbx_cryst_uncorrected","HC_HSA",1000)
 print("EA_HC_all_cryst done")
-save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_Bpath_sub_cryst.RData')
+save.image('~/Desktop/COGGPS_PAPER/only_EU/fdr_result/supplementary/MM_subscale/Experiment_Bpath_sub_cryst.RData')
 
 print('all done')
 ## ============= ##
@@ -1063,7 +1068,7 @@ EA_HC_CHM_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_CHM
 EA_HC_HSA_fluid <- EA_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_HSA",1000)
 print("EA_HC_all_cryst done")
 
-save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_Bpath_sub_fluid.RData')
+
 
 CP_Ab_PA_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ab_PA",1000)
 CP_Ab_SA_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","Ab_SA",1000)
@@ -1082,7 +1087,7 @@ CP_HC_MIH_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_MIH
 CP_HC_CHM_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_CHM",1000)
 CP_HC_HSA_fluid <- CP_Moderated_Mediation("nihtbx_fluidcomp_uncorrected","HC_HSA",1000)
 print("EA_HC_all_cryst done")
-save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_Bpath_sub_fluid.RData')
+save.image('/Desktop/COGGPS_PAPER/only_EU/fdr_result/supplementary/MM_subscale/Experiment_Bpath_sub_fluid.RData')
 
 print('all done')
 
@@ -1108,7 +1113,7 @@ EA_HC_CHM_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_CHM
 EA_HC_HSA_total <- EA_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_HSA",1000)
 print("EA_HC_all_cryst done")
 
-save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_Bpath_sub_total.RData')
+
 
 CP_Ab_PA_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ab_PA",1000)
 CP_Ab_SA_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","Ab_SA",1000)
@@ -1127,7 +1132,7 @@ CP_HC_MIH_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_MIH
 CP_HC_CHM_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_CHM",1000)
 CP_HC_HSA_total <- CP_Moderated_Mediation("nihtbx_totalcomp_uncorrected","HC_HSA",1000)
 print("EA_HC_all_cryst done")
-save.image('/work2/07939/tg872382/stampede2/connectome/stampede2/cognitive_GPS/Experiment_Bpath_sub_total.RData')
+save.image('/Desktop/COGGPS_PAPER/only_EU/fdr_result/supplementary/MM_subscale/Experiment_Bpath_sub_total.RData')
 
 print('all done')
 ## ============= ##

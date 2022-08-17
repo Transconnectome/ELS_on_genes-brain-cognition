@@ -1,0 +1,401 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+## ==== setting ==== ##
+```{r cars}
+library(ggplot2)
+library(effects)
+```
+
+## ===== function ===== ##
+```{r cars}
+## ======== glm function ======== ##
+## ======== glm function ======== ##
+glm_interactionELS_ELS_clinical_with_intel <- function(data, target, gps){
+  intel_list <- c('nihtbx_totalcomp_uncorrected')
+  final_result <- data.frame()
+  
+  for (intel in intel_list){
+    fact_COV_LIST <- c(intel,'age','sex' ,'high.educ', 'income' ,'factor(married)','factor(abcd_site)', 'BMI', gps,'interaction_a')
+
+    X_independent <- target
+    interaction_a <- data[,target] * data[,gps]
+    interaction_b <- data[,target] * data[,intel]
+    data <- cbind(data, interaction_a)
+    data <- cbind(data, interaction_b)
+    #covariate interaction 
+    for (i in 3:5){
+      fact_COV_LIST <- append(fact_COV_LIST,paste0(fact_COV_LIST[i],':',gps))
+    }
+    independent <- append(X_independent, fact_COV_LIST)
+    
+    
+    
+    independent <- paste(independent, collapse=" + ")
+    
+    glm.se <- vector()
+    glm.beta <- data.frame()
+    glm.beta.gps <- data.frame()
+    glm.beta.intel <- data.frame()
+    glm.beta.interaction_a <- data.frame()
+    glm.beta.interaction_b <- data.frame()
+    glm.p <- data.frame()
+    glm.p.gps <- data.frame()
+    glm.p.intel <- data.frame()
+    glm.p.interaction_a <- data.frame()
+    glm.p.interaction_b <- data.frame()
+    
+    for (CBCL_target in CBCL_list){
+      model <- paste(CBCL_target, '~', independent)
+      glm.re <- glm(as.formula(model), data=final_phenotype_for_MM_european_CBCL, family=gaussian())
+      cff <- coef(summary(glm.re))
+      glm.se <- c(glm.se, round(cff[2, 2], 5))
+      glm.beta <- rbind.data.frame(glm.beta, cff[2,1])
+      glm.beta.gps <- rbind.data.frame(glm.beta.gps, cff[34,1])
+      glm.beta.intel <- rbind.data.frame(glm.beta.intel, cff[3,1])
+      glm.beta.interaction_a <- rbind.data.frame(glm.beta.interaction_a,cff[35,1])
+
+      glm.p <- rbind.data.frame(glm.p, cff[2,4])
+      glm.p.gps <- rbind.data.frame(glm.p.gps, cff[34,4])
+      glm.p.intel <- rbind.data.frame(glm.p.intel, cff[3,4])
+      glm.p.interaction_a <- rbind.data.frame(glm.p.interaction_a, cff[35,4])
+
+      # VIF test
+      #VIF = car::vif(glm.re)
+      #PATH = paste0('~/Desktop/COGGPS_PAPER/only_EU/posthoc/CBCL_EAGPS_with_TOTAL_interaction_',CBCL_target,'_vif.csv')
+      #write.csv(VIF, PATH, row.names=FALSE)
+    }
+    
+    colnames(glm.beta) <- c('beta_ELS')
+    colnames(glm.beta.gps) <- c('beta_gps')
+    colnames(glm.beta.intel) <- c('beta_intel')
+    colnames(glm.beta.interaction_a) <- c('beta_interaction_a')
+
+    colnames(glm.p) <- c('p_ELS')
+    colnames(glm.p.gps) <- c('p_gps')
+    colnames(glm.p.intel) <- c('p_intel')
+    colnames(glm.p.interaction_a) <- c('p_interaction_a')
+
+    result <- data.frame(glm.beta, glm.beta.gps)
+    result <- data.frame(result, glm.beta.intel)
+    result <- data.frame(result, glm.beta.interaction_a)
+
+    result <- data.frame(result, glm.p)
+    result <- data.frame(result, glm.p.gps)
+    result <- data.frame(result, glm.p.intel)
+    result <- cbind(result, glm.p.interaction_a)
+
+    result <- cbind(CBCL_list, result)
+    
+    intel_list <- rep(intel,nrow(result))
+    result <- cbind(intel_list, result)
+    final_result <- rbind(final_result, result)
+      
+    FDR_ELS<-p.adjust(final_result$p_ELS,method='fdr')
+    final_result<-cbind(final_result,FDR_ELS)
+    FDR_gps<-p.adjust(final_result$p_gps,method='fdr')
+    final_result<-cbind(final_result,FDR_gps)
+    FDR_intel<-p.adjust(final_result$p_intel,method='fdr')
+    final_result<-cbind(final_result,FDR_intel)
+    FDR_interaction_a<-p.adjust(final_result$p_interaction_a,method='fdr')
+    final_result<-cbind(final_result,FDR_interaction_a)
+
+  }
+  return(final_result)
+}
+
+glm_interactionIntel_ELS_clinical_with_intel <- function(data, target, gps){
+  intel_list <- c('nihtbx_totalcomp_uncorrected')
+  final_result <- data.frame()
+  
+  for (intel in intel_list){
+    #fact_COV_LIST <- c(intel,'age','sex' ,'high.educ', 'income' ,'factor(married)','factor(abcd_site)', 'BMI', gps,'interaction_a','interaction_b')
+    fact_COV_LIST <- c(intel,'age','sex' ,'high.educ', 'income' ,'factor(married)','factor(abcd_site)', 'BMI', gps,'interaction_b')
+    X_independent <- target
+    interaction_a <- data[,target] * data[,gps]
+    interaction_b <- data[,target] * data[,intel]
+    data <- cbind(data, interaction_a)
+    data <- cbind(data, interaction_b)
+    
+    #covariate interaction 
+    for (i in 3:5){
+      fact_COV_LIST <- append(fact_COV_LIST,paste0(fact_COV_LIST[i],':',gps))
+    }
+    independent <- append(X_independent, fact_COV_LIST)
+    
+    
+    independent <- paste(independent, collapse=" + ")
+    
+    glm.se <- vector()
+    glm.beta <- data.frame()
+    glm.beta.gps <- data.frame()
+    glm.beta.intel <- data.frame()
+    glm.beta.interaction_a <- data.frame()
+    glm.beta.interaction_b <- data.frame()
+    glm.p <- data.frame()
+    glm.p.gps <- data.frame()
+    glm.p.intel <- data.frame()
+    glm.p.interaction_a <- data.frame()
+    glm.p.interaction_b <- data.frame()
+    
+    for (CBCL_target in CBCL_list){
+      model <- paste(CBCL_target, '~', independent)
+      glm.re <- glm(as.formula(model), data=final_phenotype_for_MM_european_CBCL, family=gaussian())
+      cff <- coef(summary(glm.re))
+      #print(cff)
+      glm.se <- c(glm.se, round(cff[2, 2], 5))
+      glm.beta <- rbind.data.frame(glm.beta, cff[2,1])
+      glm.beta.gps <- rbind.data.frame(glm.beta.gps, cff[34,1])
+      glm.beta.intel <- rbind.data.frame(glm.beta.intel, cff[3,1])
+      glm.beta.interaction_b <- rbind.data.frame(glm.beta.interaction_b,cff[35,1])
+      glm.p <- rbind.data.frame(glm.p, cff[2,4])
+      glm.p.gps <- rbind.data.frame(glm.p.gps, cff[34,4])
+      glm.p.intel <- rbind.data.frame(glm.p.intel, cff[3,4])
+      glm.p.interaction_b <- rbind.data.frame(glm.p.interaction_b, cff[35,4])
+      # VIF test
+      #VIF = car::vif(glm.re)
+      #PATH = paste0('~/Desktop/COGGPS_PAPER/only_EU/posthoc/CBCL_EAGPS_with_TOTAL_interaction_',CBCL_target,'_vif.csv')
+      #write.csv(VIF, PATH, row.names=FALSE)
+      
+    }
+    
+    colnames(glm.beta) <- c('beta_ELS')
+    colnames(glm.beta.gps) <- c('beta_gps')
+    colnames(glm.beta.intel) <- c('beta_intel')
+    colnames(glm.beta.interaction_b) <- c('beta_interaction_b')
+    colnames(glm.p) <- c('p_ELS')
+    colnames(glm.p.gps) <- c('p_gps')
+    colnames(glm.p.intel) <- c('p_intel')
+    colnames(glm.p.interaction_b) <- c('p_interaction_b')
+    result <- data.frame(glm.beta, glm.beta.gps)
+    result <- data.frame(result, glm.beta.intel)
+    result <- data.frame(result, glm.beta.interaction_b)
+    result <- data.frame(result, glm.p)
+    result <- data.frame(result, glm.p.gps)
+    result <- data.frame(result, glm.p.intel)
+    result <- cbind(result, glm.p.interaction_b)
+    result <- cbind(CBCL_list, result)
+    
+    intel_list <- rep(intel,nrow(result))
+    result <- cbind(intel_list, result)
+    final_result <- rbind(final_result, result)
+      
+    FDR_ELS<-p.adjust(final_result$p_ELS,method='fdr')
+    final_result<-cbind(final_result,FDR_ELS)
+    FDR_gps<-p.adjust(final_result$p_gps,method='fdr')
+    final_result<-cbind(final_result,FDR_gps)
+    FDR_intel<-p.adjust(final_result$p_intel,method='fdr')
+    final_result<-cbind(final_result,FDR_intel)
+    FDR_interaction_b<-p.adjust(final_result$p_interaction_b,method='fdr')
+    final_result<-cbind(final_result,FDR_interaction_b)
+  }
+  return(final_result)
+}
+
+
+glm_interactionALL_ELS_clinical_with_intel <- function(data, target, gps){
+  intel_list <- c('nihtbx_totalcomp_uncorrected')
+  final_result <- data.frame()
+  
+  for (intel in intel_list){
+    fact_COV_LIST <- c(intel,'age','sex' ,'high.educ', 'income' ,'factor(married)','factor(abcd_site)', 'BMI', gps,'interaction_a','interaction_b')
+    X_independent <- target
+    interaction_a <- data[,target] * data[,gps]
+    interaction_b <- data[,target] * data[,intel]
+    data <- cbind(data, interaction_a)
+    data <- cbind(data, interaction_b)
+    #covariate interaction 
+    for (i in 3:5){
+      fact_COV_LIST <- append(fact_COV_LIST,paste0(fact_COV_LIST[i],':',gps))
+    }
+    independent <- append(X_independent, fact_COV_LIST)
+    
+    
+    independent <- paste(independent, collapse=" + ")
+    
+    glm.se <- vector()
+    glm.beta <- data.frame()
+    glm.beta.gps <- data.frame()
+    glm.beta.intel <- data.frame()
+    glm.beta.interaction_a <- data.frame()
+    glm.beta.interaction_b <- data.frame()
+    glm.p <- data.frame()
+    glm.p.gps <- data.frame()
+    glm.p.intel <- data.frame()
+    glm.p.interaction_a <- data.frame()
+    glm.p.interaction_b <- data.frame()
+    
+    for (CBCL_target in CBCL_list){
+      model <- paste(CBCL_target, '~', independent)
+      glm.re <- glm(as.formula(model), data=final_phenotype_for_MM_european_CBCL, family=gaussian())
+      cff <- coef(summary(glm.re))
+      print(cff)
+      glm.se <- c(glm.se, round(cff[2, 2], 5))
+      glm.beta <- rbind.data.frame(glm.beta, cff[2,1])
+      glm.beta.gps <- rbind.data.frame(glm.beta.gps, cff[34,1])
+      glm.beta.intel <- rbind.data.frame(glm.beta.intel, cff[3,1])
+      glm.beta.interaction_a <- rbind.data.frame(glm.beta.interaction_a,cff[35,1])
+      glm.beta.interaction_b <- rbind.data.frame(glm.beta.interaction_b,cff[36,1])
+      glm.p <- rbind.data.frame(glm.p, cff[2,4])
+      glm.p.gps <- rbind.data.frame(glm.p.gps, cff[34,4])
+      glm.p.intel <- rbind.data.frame(glm.p.intel, cff[3,4])
+      glm.p.interaction_a <- rbind.data.frame(glm.p.interaction_a, cff[35,4])
+      glm.p.interaction_b <- rbind.data.frame(glm.p.interaction_b, cff[36,4])
+      # VIF test
+      #VIF = car::vif(glm.re)
+      #PATH = paste0('~/Desktop/COGGPS_PAPER/only_EU/posthoc/CBCL_EAGPS_with_TOTAL_interaction_',CBCL_target,'_vif.csv')
+      #write.csv(VIF, PATH, row.names=FALSE)
+    }
+    
+    colnames(glm.beta) <- c('beta_ELS')
+    colnames(glm.beta.gps) <- c('beta_gps')
+    colnames(glm.beta.intel) <- c('beta_intel')
+    colnames(glm.beta.interaction_a) <- c('beta_interaction_a')
+    colnames(glm.beta.interaction_b) <- c('beta_interaction_b')
+    colnames(glm.p) <- c('p_ELS')
+    colnames(glm.p.gps) <- c('p_gps')
+    colnames(glm.p.intel) <- c('p_intel')
+    colnames(glm.p.interaction_a) <- c('p_interaction_a')
+    colnames(glm.p.interaction_b) <- c('p_interaction_b')
+    result <- data.frame(glm.beta, glm.beta.gps)
+    result <- data.frame(result, glm.beta.intel)
+    result <- data.frame(result, glm.beta.interaction_a)
+    result <- data.frame(result, glm.beta.interaction_b)
+    result <- data.frame(result, glm.p)
+    result <- data.frame(result, glm.p.gps)
+    result <- data.frame(result, glm.p.intel)
+    result <- cbind(result, glm.p.interaction_a)
+    result <- cbind(result, glm.p.interaction_b)
+    result <- cbind(CBCL_list, result)
+    
+    intel_list <- rep(intel,nrow(result))
+    result <- cbind(intel_list, result)
+    final_result <- rbind(final_result, result)
+      
+    FDR_ELS<-p.adjust(final_result$p_ELS,method='fdr')
+    final_result<-cbind(final_result,FDR_ELS)
+    FDR_gps<-p.adjust(final_result$p_gps,method='fdr')
+    final_result<-cbind(final_result,FDR_gps)
+    FDR_intel<-p.adjust(final_result$p_intel,method='fdr')
+    final_result<-cbind(final_result,FDR_intel)
+    FDR_interaction_a<-p.adjust(final_result$p_interaction_a,method='fdr')
+    final_result<-cbind(final_result,FDR_interaction_a)
+    FDR_interaction_b<-p.adjust(final_result$p_interaction_b,method='fdr')
+    final_result<-cbind(final_result,FDR_interaction_b)
+  }
+  return(final_result)
+}
+
+## ======== plotting function ======== ##
+plotting_interaction <- function(data, X_independent, moderator, CBCL_target, with_intel=FALSE){
+  if (with_intel == FALSE){
+    data$married <- as.factor(data$married)
+    data$abcd_site <- as.factor(data$abcd_site)
+    fact_COV_LIST <- c('age','sex' ,'high.educ', 'income' ,'married','abcd_site', 'BMI') # should be checked
+    independent <- append(paste0(X_independent, "*",moderator), fact_COV_LIST)
+    independent <- paste(independent, collapse=" + ")
+    
+    model <- paste(CBCL_target, '~', independent)
+    
+    # glm
+    glm.re <- glm(as.formula(model), data=data, family=gaussian())
+    
+    # interaction effect
+    gps.sd <- c(mean(c(data[,X_independent]))-sd(c(data[,X_independent])),
+            mean(c(data[,X_independent])),
+            mean(c(data[,X_independent]))+sd(c(data[,X_independent])))
+
+    gps.interaction_effect <- effect(term = 'Ab:EA',glm.re, xlevels=list(EA=gps.sd))
+    gps.interaction_effect <- as.data.frame(gps.interaction_effect)
+    
+    gps.interaction_effect[,moderator] <- factor(c(gps.interaction_effect[,moderator]),levels=gps.sd,labels=c("-1SD", "Mean", "+1SD"))
+    
+    # plotting
+    plot <- ggplot(data=gps.interaction_effect, aes(x=Ab, y=fit, group=EA))+
+      geom_line(size=1, aes(color=EA))+                                 ##change           
+      geom_ribbon(aes(ymin=fit-se, ymax=fit+se),fill="gray",alpha=.4)+
+      ylab(CBCL_target)+
+      xlab(X_independent)+
+      theme_bw()
+    plot
+  }else{
+    intel_list <- c('nihtbx_totalcomp_uncorrected')
+    
+    for(intel in intel_list){
+      
+      data$married <- as.factor(data$married)
+      data$abcd_site <- as.factor(data$abcd_site)
+      fact_COV_LIST <- c(intel,'age','sex' ,'high.educ', 'income' ,'married','abcd_site', 'BMI','interaction_b') # should be checked
+      interaction_b <-data[,X_independent] * data[,intel]
+      data <- cbind(data, interaction_b)
+      independent <- append(paste0(X_independent, "*",moderator), fact_COV_LIST)
+      independent <- paste(independent, collapse=" + ")
+          
+      model <- paste(CBCL_target, '~', independent)
+          
+      # glm
+      glm.re <- glm(as.formula(model), data=data, family=gaussian())
+          
+      # interaction effect
+      gps.sd <- c(mean(c(data[,X_independent]))-sd(c(data[,X_independent])),
+                  mean(c(data[,X_independent])),
+                  mean(c(data[,X_independent]))+sd(c(data[,X_independent])))
+      
+      gps.interaction_effect <- effect(term = 'Ab:EA',glm.re, xlevels=list(EA=gps.sd))
+      gps.interaction_effect <- as.data.frame(gps.interaction_effect)
+          
+      gps.interaction_effect[,moderator] <- factor(c(gps.interaction_effect[,moderator]),levels=gps.sd,labels=c("-1SD", "Mean", "+1SD"))
+          
+      # plotting
+      plot <- ggplot(data=gps.interaction_effect, aes(x=Ab, y=fit, group=EA))+
+            geom_line(size=1, aes(color=EA))+                                 ##change
+            geom_ribbon(aes(ymin=fit-se, ymax=fit+se),fill="gray",alpha=.4)+
+            ylab(CBCL_target)+
+            xlab(X_independent)+
+            theme_bw()
+      print(plot)
+      
+    }
+    
+  } 
+} 
+```
+
+
+## ===== data prep ===== ##
+```{r cars}
+## ======== data preprocesssing ======== ##  
+ABCD_phenotype_total <- read.csv(file='~/Desktop/COGGPS_PAPER/only_EU/ABCD_phenotype_total.csv')
+final_phenotype_for_MM_european <- read.csv(file='~/Desktop/COGGPS_PAPER/only_EU/final_phenotype_for_MM_european.csv')
+
+
+CBCL_list <- colnames(ABCD_phenotype_total)[40:42]
+subjectkey <- ABCD_phenotype_total[,'subjectkey']
+CBCL <- cbind(subjectkey, ABCD_phenotype_total[,CBCL_list])
+final_phenotype_for_MM_european_CBCL <- merge(final_phenotype_for_MM_european, CBCL, by='subjectkey')
+# rescaling
+for (CBCL_target in CBCL_list){
+  mean <- mean(final_phenotype_for_MM_european_CBCL[,CBCL_target])
+  sd <- sd(final_phenotype_for_MM_european_CBCL[,CBCL_target])
+  final_phenotype_for_MM_european_CBCL[,CBCL_target] <- (final_phenotype_for_MM_european_CBCL[,CBCL_target] - mean)/sd
+}
+
+
+```
+
+## ===== moderation without cognition as covariates ===== ##
+```{r cars}
+## ======== glm ======== ##  
+#result <- glm_ELS_clinical_with_intel(final_phenotype_for_MM_european_CBCL,'Ab', gps='EA')
+result_interactionELS <- glm_interactionELS_ELS_clinical_with_intel(final_phenotype_for_MM_european_CBCL,'Ab', gps='EA') 
+result_interactionIntel <- glm_interactionIntel_ELS_clinical_with_intel(final_phenotype_for_MM_european_CBCL,'Ab', gps='EA') 
+result_interaction <- glm_interactionALL_ELS_clinical_with_intel(final_phenotype_for_MM_european_CBCL,'Ab', gps='EA') 
+ 
+
+## ======== plotting interaction effect ======== ## 
+plotting_interaction(final_phenotype_for_MM_european_CBCL, X_independent='Ab', moderator='EA', CBCL_target='TotProb.CBCL', with_intel=TRUE)
+
+```
+
